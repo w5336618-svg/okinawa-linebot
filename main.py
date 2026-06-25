@@ -12,6 +12,10 @@ app = Flask(__name__)
 LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+OWNER_USER_ID = 'U1de725e610e28c4102411a93cf234726'
+
+# 暫存待審核的訊息 {審核ID: {fan_id, fan_msg, draft}}
+pending = {}
 
 def _load_knowledge():
     kb_path = os.path.join(os.path.dirname(__file__), 'knowledge.txt')
@@ -66,15 +70,14 @@ def verify_signature(body: bytes, signature: str) -> bool:
 
 def reply_message(reply_token: str, text: str):
     url = 'https://api.line.me/v2/bot/message/reply'
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
-    }
-    payload = {
-        'replyToken': reply_token,
-        'messages': [{'type': 'text', 'text': text}]
-    }
-    requests.post(url, headers=headers, json=payload)
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'}
+    requests.post(url, headers=headers, json={'replyToken': reply_token, 'messages': [{'type': 'text', 'text': text}]})
+
+
+def push_message(user_id: str, text: str):
+    url = 'https://api.line.me/v2/bot/message/push'
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'}
+    requests.post(url, headers=headers, json={'to': user_id, 'messages': [{'type': 'text', 'text': text}]})
 
 
 def ask_claude(user_message: str) -> str:
@@ -98,19 +101,54 @@ def webhook():
 
     events = json.loads(body)['events']
     for event in events:
-        if event['type'] == 'message' and event['message']['type'] == 'text':
-            user_text = event['message']['text']
-            reply_token = event['replyToken']
-            user_id = event['source'].get('userId', '')
-            if user_text.strip() == '/myid':
-                reply_message(reply_token, f'你的 LINE User ID 是：\n{user_id}')
+        if event['type'] != 'message' or event['message']['type'] != 'text':
+            continue
+        user_text = event['message']['text'].strip()
+        reply_token = event['replyToken']
+        user_id = event['source'].get('userId', '')
+
+        # /myid 指令
+        if user_text == '/myid':
+            reply_message(reply_token, f'你的 LINE User ID 是：\n{user_id}')
+            continue
+
+        # 你本人在審核：回覆「OK數字」或「修改內容#數字」
+        if user_id == OWNER_USER_ID:
+            # 格式：OK1 或 直接打修改內容#1
+            import re
+            ok_match = re.match(r'^ok\s*(\d+)$', user_text, re.IGNORECASE)
+            edit_match = re.match(r'^(.+)#(\d+)$', user_text, re.DOTALL)
+            if ok_match:
+                pid = ok_match.group(1)
+                if pid in pending:
+                    p = pending.pop(pid)
+                    push_message(p['fan_id'], p['draft'])
+                    reply_message(reply_token, f'✅ 已送出回覆給粉絲')
                 continue
-            try:
-                reply = ask_claude(user_text)
-            except Exception as e:
-                print(f"[ask_claude error] {type(e).__name__}: {e}", flush=True)
-                reply = '抱歉，目前系統忙碌中，請稍後再試 🙏'
-            reply_message(reply_token, reply)
+            elif edit_match:
+                new_reply, pid = edit_match.group(1).strip(), edit_match.group(2)
+                if pid in pending:
+                    p = pending.pop(pid)
+                    push_message(p['fan_id'], new_reply)
+                    reply_message(reply_token, f'✅ 已送出修改後的回覆')
+                continue
+
+        # 粉絲訊息：草擬回覆後送給你審核
+        try:
+            draft = ask_claude(user_text)
+        except Exception as e:
+            print(f"[ask_claude error] {type(e).__name__}: {e}", flush=True)
+            reply_message(reply_token, '抱歉，目前系統忙碌中，請稍後再試 🙏')
+            continue
+
+        pid = str(len(pending) + 1)
+        pending[pid] = {'fan_id': user_id, 'fan_msg': user_text, 'draft': draft}
+        reply_message(reply_token, '謝謝你的訊息！我們會盡快回覆你 ✈️')
+        push_message(OWNER_USER_ID,
+            f'📩 粉絲問【#{pid}】：\n{user_text}\n\n'
+            f'💬 草稿回覆：\n{draft}\n\n'
+            f'回覆「OK{pid}」送出，或打修改內容加「#{pid}」送出'
+        )
 
     return 'OK'
 
