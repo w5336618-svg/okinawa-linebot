@@ -3,9 +3,12 @@ import hmac
 import hashlib
 import base64
 import json
+import threading
 from flask import Flask, request, abort
 import anthropic
 import requests
+
+AUTO_REPLY_SECONDS = 3 * 60 * 60  # 3 小時
 
 app = Flask(__name__)
 
@@ -178,8 +181,19 @@ def webhook():
         push_message(OWNER_USER_ID,
             f'📩 粉絲問【#{pid}】：\n{user_text}\n\n'
             f'💬 草稿回覆：\n{draft}\n\n'
-            f'回覆「OK{pid}」送出，或打修改內容加「#{pid}」送出'
+            f'回覆「OK{pid}」送出，或打修改內容加「#{pid}」送出\n'
+            f'⏰ 3小時內沒回覆將自動送出草稿'
         )
+
+        def auto_send(pid=pid):
+            if pid in pending:
+                p = pending.pop(pid)
+                push_message(p['fan_id'], p['draft'])
+                push_message(OWNER_USER_ID, f'⏰ 【#{pid}】逾時自動送出草稿回覆')
+
+        t = threading.Timer(AUTO_REPLY_SECONDS, auto_send)
+        t.daemon = True
+        t.start()
 
     return 'OK'
 
