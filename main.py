@@ -17,6 +17,34 @@ OWNER_USER_ID = 'U1de725e610e28c4102411a93cf234726'
 # 暫存待審核的訊息 {審核ID: {fan_id, fan_msg, draft}}
 pending = {}
 
+LEARNING_FILE = os.path.join(os.path.dirname(__file__), 'learning.json')
+
+def load_learning():
+    try:
+        return json.load(open(LEARNING_FILE, encoding='utf-8'))
+    except:
+        return []
+
+def save_learning(examples):
+    json.dump(examples, open(LEARNING_FILE, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+
+def add_learning(fan_msg, owner_reply):
+    examples = load_learning()
+    examples.append({'q': fan_msg, 'a': owner_reply})
+    examples = examples[-30:]  # 保留最近 30 筆
+    save_learning(examples)
+
+def build_examples_prompt():
+    examples = load_learning()
+    if not examples:
+        return ''
+    lines = ['以下是住幾天本人過去的回覆範例，請模仿他的語氣和風格：']
+    for e in examples[-20:]:
+        lines.append(f'粉絲問：{e["q"]}')
+        lines.append(f'住幾天回：{e["a"]}')
+        lines.append('')
+    return '\n'.join(lines)
+
 def _load_knowledge():
     kb_path = os.path.join(os.path.dirname(__file__), 'knowledge.txt')
     try:
@@ -82,10 +110,12 @@ def push_message(user_id: str, text: str):
 
 def ask_claude(user_message: str) -> str:
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    examples = build_examples_prompt()
+    system = SYSTEM_PROMPT + ('\n\n' + examples if examples else '')
     message = client.messages.create(
         model='claude-haiku-4-5-20251001',
         max_tokens=500,
-        system=SYSTEM_PROMPT,
+        system=system,
         messages=[{'role': 'user', 'content': user_message}]
     )
     return message.content[0].text
@@ -130,7 +160,8 @@ def webhook():
                 if pid in pending:
                     p = pending.pop(pid)
                     push_message(p['fan_id'], new_reply)
-                    reply_message(reply_token, f'✅ 已送出修改後的回覆')
+                    add_learning(p['fan_msg'], new_reply)
+                    reply_message(reply_token, f'✅ 已送出修改後的回覆，並記錄學習 📚')
                 continue
 
         # 粉絲訊息：草擬回覆後送給你審核
