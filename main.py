@@ -13,7 +13,16 @@ LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
-SYSTEM_PROMPT = """你是「住幾天沖繩 AI 助手」，由台灣沖繩旅遊達人「住幾天」授權的智能助手。
+def _load_knowledge():
+    kb_path = os.path.join(os.path.dirname(__file__), 'knowledge.txt')
+    try:
+        return open(kb_path, encoding='utf-8').read()
+    except:
+        return ''
+
+KNOWLEDGE = _load_knowledge()
+
+SYSTEM_PROMPT = f"""你是「住幾天沖繩 AI 助手」，由台灣沖繩旅遊達人「住幾天」授權的智能助手。
 
 關於住幾天：
 - 台灣人，去過沖繩 30 幾次，每次大約 6 天
@@ -38,7 +47,10 @@ SYSTEM_PROMPT = """你是「住幾天沖繩 AI 助手」，由台灣沖繩旅遊
 - 沖繩旅遊省錢技巧
 - 幾天幾夜行程規劃
 
-如果有人問和沖繩無關的問題，請禮貌引導回沖繩旅遊主題。"""
+如果有人問和沖繩無關的問題，請禮貌引導回沖繩旅遊主題。
+
+以下是住幾天拍過的 781 支 IG 影片清單，回答問題時可以推薦相關影片連結：
+{KNOWLEDGE}"""
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
