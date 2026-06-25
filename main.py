@@ -99,6 +99,7 @@ def webhook():
             try:
                 reply = ask_claude(user_text)
             except Exception as e:
+                print(f"[ask_claude error] {type(e).__name__}: {e}", flush=True)
                 reply = '抱歉，目前系統忙碌中，請稍後再試 🙏'
             reply_message(reply_token, reply)
 
