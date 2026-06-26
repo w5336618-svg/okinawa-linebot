@@ -233,7 +233,23 @@ def webhook():
                     reply_message(reply_token, f'找不到 #{pid}')
                 continue
 
-        # 粉絲訊息：直接回覆，記錄到今日 log
+        # 非沖繩相關問題直接固定回覆，不呼叫 Claude
+        OKINAWA_KEYWORDS = [
+            '沖繩','景點','美食','餐廳','住宿','飯店','民宿','租車','機票','交通',
+            '那霸','美浜','北谷','恩納','名護','本部','讀谷','糸滿','豐見城',
+            '海灘','海','潛水','浮潛','離島','石垣','宮古','竹富','波照間',
+            '首里','玉泉洞','美麗海','水族館','古宇利','萬座','殘波','瀨長島',
+            '推薦','攻略','行程','幾天','幾夜','預算','費用','便宜','划算',
+            '藥妝','購物','伴手禮','超市','牛排','塔可','沖繩麵','海葡萄',
+            '租','車','駕照','高速','HighWay','ETC','加油',
+            '天氣','幾月','季節','台風','颱風',
+        ]
+        is_okinawa = any(kw in user_text for kw in OKINAWA_KEYWORDS)
+        if not is_okinawa:
+            reply_message(reply_token, '我是住幾天沖繩 AI 助手，有沖繩旅遊問題歡迎問我！')
+            continue
+
+        # 沖繩相關：呼叫 Claude
         try:
             bot_reply = ask_claude(user_text)
         except Exception as e:
