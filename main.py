@@ -255,10 +255,14 @@ def webhook():
             count = user_daily_count.get(user_id, 0)
         if count == 0 and user_id != OWNER_USER_ID:
             reply_message(reply_token,
-                '嗨！我是住幾天沖繩 AI 助手 🌺\n\n'
-                '住幾天有 800 支沖繩短影片，建議先去 IG 或粉專搜尋看看👇\n'
-                'IG：@fta8716\n\n'
-                '如果影片裡找不到答案，再來問我，每天最多可問 10 次喔！'
+                '嗨！這裡是「住幾天沖繩 AI 助手」🌺\n\n'
+                '⚠️ 請注意：這不是真人，是 AI 機器人。\n\n'
+                '我的功能只有一個：\n'
+                '幫你從住幾天的 800 支沖繩短影片中找資料。\n\n'
+                '沖繩以外的問題、私人問題、閒聊，我都無法回答。\n\n'
+                '每天最多可以問我 10 個沖繩相關問題。\n'
+                '官方網站即將推出，敬請期待！\n\n'
+                '現在有什麼沖繩問題想問嗎？'
             )
             with log_lock:
                 user_daily_count[user_id] = 1
