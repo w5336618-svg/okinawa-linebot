@@ -23,6 +23,10 @@ daily_log = []
 log_date = datetime.now(TWN).date()
 log_lock = threading.Lock()
 
+# 每人每天提問次數
+user_daily_count = {}
+DAILY_LIMIT = 10
+
 LEARNING_FILE = os.path.join(os.path.dirname(__file__), 'learning.json')
 
 
@@ -165,10 +169,11 @@ def get_summary_text():
 
 
 def reset_daily_log():
-    global daily_log, log_date
+    global daily_log, log_date, user_daily_count
     with log_lock:
         daily_log = []
         log_date = datetime.now(TWN).date()
+        user_daily_count = {}
 
 
 def schedule_daily_summary():
@@ -233,6 +238,30 @@ def webhook():
                     reply_message(reply_token, f'找不到 #{pid}')
                 continue
 
+        # 第一次發訊息：說明正確使用方式
+        with log_lock:
+            count = user_daily_count.get(user_id, 0)
+        if count == 0 and user_id != OWNER_USER_ID:
+            reply_message(reply_token,
+                '嗨！我是住幾天沖繩 AI 助手 🌺\n\n'
+                '住幾天有 800 支沖繩短影片，建議先去 IG 或粉專搜尋看看👇\n'
+                'IG：@fta8716\n\n'
+                '如果影片裡找不到答案，再來問我，每天最多可問 10 次喔！'
+            )
+            with log_lock:
+                user_daily_count[user_id] = 1
+            continue
+
+        # 每日提問上限
+        if user_id != OWNER_USER_ID:
+            with log_lock:
+                count = user_daily_count.get(user_id, 0)
+            if count >= DAILY_LIMIT:
+                reply_message(reply_token,
+                    f'你今天已經問了 {DAILY_LIMIT} 次囉！\n更多資訊可以去住幾天 IG 找短影片 🎬\nIG：@fta8716'
+                )
+                continue
+
         # 非沖繩相關問題直接固定回覆，不呼叫 Claude
         OKINAWA_KEYWORDS = [
             '沖繩','景點','美食','餐廳','住宿','飯店','民宿','租車','機票','交通',
@@ -262,6 +291,7 @@ def webhook():
         with log_lock:
             pid = len(daily_log) + 1
             daily_log.append({'id': pid, 'fan_id': user_id, 'fan_msg': user_text, 'bot_reply': bot_reply})
+            user_daily_count[user_id] = user_daily_count.get(user_id, 0) + 1
 
     return 'OK'
 
